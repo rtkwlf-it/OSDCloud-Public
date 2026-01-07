@@ -55,22 +55,79 @@ function Set-SleepSettings {
         [int]$SettingValue = 0
     )
     
-    # Get power setting data for specified power mode targeting a specific power setting GUID    
-    $power = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex | 
-        Where-Object { $_.InstanceID -like "*$PowerMode*" -and $_.InstanceID -like "*$SettingGuid*" }
+    try {
+        Write-Host "Setting power configuration for $PowerMode mode..."
+        Write-Host "  Setting GUID: $SettingGuid"
+        Write-Host "  Target Value: $SettingValue"
+        
+        # Get power setting data for specified power mode targeting a specific power setting GUID    
+        $power = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex | 
+            Where-Object { $_.InstanceID -like "*$PowerMode*" -and $_.InstanceID -like "*$SettingGuid*" }
 
-    # Loop through each matching power setting
-    foreach ($setting in $power) {
-        # Set the setting value to specified value
-        $setting.SettingIndexValue = $SettingValue
-        # Apply the modified setting
-        Set-CimInstance -InputObject $setting
+        if (-not $power) {
+            Write-Warning "No power settings found matching PowerMode: $PowerMode and GUID: $SettingGuid"
+            return $false
+        }
+
+        $successCount = 0
+        $failureCount = 0
+
+        # Loop through each matching power setting
+        foreach ($setting in $power) {
+            try {
+                $originalValue = $setting.SettingIndexValue
+                Write-Host "  Processing setting: $($setting.InstanceID)"
+                Write-Host "    Original value: $originalValue"
+                
+                # Set the setting value to specified value
+                $setting.SettingIndexValue = $SettingValue
+                # Apply the modified setting
+                Set-CimInstance -InputObject $setting -ErrorAction Stop
+                
+                # Verify the change was applied
+                $verifyPower = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex | 
+                    Where-Object { $_.InstanceID -eq $setting.InstanceID }
+                
+                if ($verifyPower.SettingIndexValue -eq $SettingValue) {
+                    Write-Host "    New value: $($verifyPower.SettingIndexValue) - Successfully applied" -ForegroundColor Green
+                    $successCount++
+                } else {
+                    Write-Warning "    Verification failed. Expected: $SettingValue, Got: $($verifyPower.SettingIndexValue)"
+                    $failureCount++
+                }
+            }
+            catch {
+                Write-Error "    Failed to apply setting: $($_.Exception.Message)"
+                $failureCount++
+            }
+        }
+
+        Write-Host "`nSummary: $successCount succeeded, $failureCount failed"
+        return ($failureCount -eq 0)
+    }
+    catch {
+        Write-Error "Error in Set-SleepSettings: $($_.Exception.Message)"
+        return $false
     }
 }
 
 #endregion
 
 #region Process
+try {
+    Write-Host "Disabling Sleep After settings on AC power..."
+    $acResult = Set-SleepSettings -PowerMode "AC" -SettingValue 0
+
+    if ($acResult) {
+        Write-Host "Sleep After settings successfully disabled on AC power." -ForegroundColor Green
+    } else {
+        Write-Warning "One or more Sleep After settings failed to apply."
+    }
+}
+catch {
+    Write-Error $_.Exception.Message
+}
+
 try {
     Write-Host "Fixing TimeZone service statup type to MANUAL."
     Manage-Services -ServiceName $ServiceName -Action $Action
