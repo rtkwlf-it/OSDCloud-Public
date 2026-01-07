@@ -56,6 +56,7 @@ function Set-SleepSettings {
     )
     
     try {
+        Start-Transcript -Path "C:\Windows\Temp\SleepSettings_$PowerMode.Log" -Force -ErrorAction SilentlyContinue
         Write-Host "Setting power configuration for $PowerMode mode..."
         Write-Host "  Setting GUID: $SettingGuid"
         Write-Host "  Target Value: $SettingValue"
@@ -103,6 +104,7 @@ function Set-SleepSettings {
         }
 
         Write-Host "`nSummary: $successCount succeeded, $failureCount failed"
+        Stop-Transcript -ErrorAction SilentlyContinue
         return ($failureCount -eq 0)
     }
     catch {
