@@ -39,6 +39,35 @@ Function Manage-Services {
         throw $_
     }
 }
+
+function Set-SleepSettings {
+    Param(
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("AC", "DC")]
+        [string]$PowerMode = "AC",
+        
+        [Parameter(Mandatory=$false)]
+        # The GUID 29f6c1db-86da-48c5-9fdb-f2b67b1f44da represents the "sleep after" setting
+        # Details for guids of power setting can be found by running "powercfg /query" in command prompt
+        [string]$SettingGuid = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da",
+        
+        [Parameter(Mandatory=$false)]
+        [int]$SettingValue = 0
+    )
+    
+    # Get power setting data for specified power mode targeting a specific power setting GUID    
+    $power = Get-CimInstance -Namespace root\cimv2\power -ClassName Win32_PowerSettingDataIndex | 
+        Where-Object { $_.InstanceID -like "*$PowerMode*" -and $_.InstanceID -like "*$SettingGuid*" }
+
+    # Loop through each matching power setting
+    foreach ($setting in $power) {
+        # Set the setting value to specified value
+        $setting.SettingIndexValue = $SettingValue
+        # Apply the modified setting
+        Set-CimInstance -InputObject $setting
+    }
+}
+
 #endregion
 
 #region Process
